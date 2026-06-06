@@ -35,6 +35,10 @@ python scripts/solver.py "series: sin(z) at 0 order=8"
 python scripts/solver.py "方程: |z| + z = 1 + i"
 python scripts/solver.py "积分: 1/(z^2+4) |z|=3"
 python scripts/solver.py "奇点: tan(z) at z=pi/2"
+
+# LaTeX 格式输出（加 --latex 参数）
+python scripts/solver.py --latex "z^2 + 1 = 0"
+python scripts/solver.py --latex "integral: 1/(z^2+1) |z|=2"
 ```
 
 ## 设计原则

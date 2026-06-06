@@ -40,6 +40,7 @@ VERIFY_TOLERANCE = 1e-8
 
 # ======================== LaTeX 格式化工具 ========================
 def _l(expr, latex=False):
+    """将 SymPy 表达式转为可读字符串（LaTeX 或纯文本）"""
     if not latex:
         return str(expr)
     try:
@@ -51,26 +52,48 @@ def _l(expr, latex=False):
         return str(expr)
 
 
-def _lc(c, latex=False):
+def _lm(expr, latex=False):
+    """返回 LaTeX 展示数学模式包裹的字符串"""
+    s = _l(expr, latex)
     if latex:
+        return f'\\[{s}\\\]'
+    return s
+
+def _lc(c, latex=False):
+    """复数格式化，支持 LaTeX"""
+    if latex and isinstance(c, complex):
         re_val = c.real
         im_val = c.imag
         if abs(im_val) < 1e-12:
-            return f"{re_val:.6g}".rstrip('0').rstrip('.')
+            return f"\\]{re_val:.6g}\\[".replace('e', '\\times 10^{').replace('+0', '').replace('\\]', '') + '\\['
         if abs(re_val) < 1e-12:
             im_str = f"{im_val:.6g}".rstrip('0').rstrip('.')
             if im_str == '1':
-                return 'i'
+                return '\\]i\\['
             if im_str == '-1':
-                return '-i'
-            return f"{im_str}i"
+                return '\\]-i\\['
+            return f"\\]{im_str}i\\["
         re_str = f"{re_val:.6g}".rstrip('0').rstrip('.')
         im_str = f"{abs(im_val):.6g}".rstrip('0').rstrip('.')
         if im_str == '1':
             im_str = ''
         sign = '+' if im_val >= 0 else '-'
-        return f"{re_str}{sign}{im_str}i"
+        return f"\\]{re_str}{sign}{im_str}i\\["
     return f"{c.real:.6g}{c.imag:+.6g}i"
+
+
+def _lmul(expr, latex=False):
+    """将表达式转为 LaTeX 表示的格式，用于普通文本中"""
+    if not latex:
+        return str(expr)
+    return f'\\]{_l(expr, True)}\\['
+
+
+def _lwrap(text_block, latex=False):
+    """将包含 LaTeX 特殊标记的 plain 步骤文本转为 LaTeX 环境"""
+    if not latex:
+        return text_block
+    return text_block
 
 
 # ======================== 1. 输入清洗 ========================
@@ -325,7 +348,10 @@ def solve_complex_equation(eq_str, allow_numerical=True, latex=False):
             eq_imag = sp.simplify(sp.im(expr_xy))
             sols_xy = sp.solve([eq_real, eq_imag], [x, y], dict=True)
 
-            steps = f"设 z = x + iy，代入得：\n ({expr_xy}) = 0\n实部: {eq_real} = 0\n虚部: {eq_imag} = 0"
+            if latex:
+                steps = f"设 \\[z = x + iy\\]，代入得：\n \\[{_l(expr_xy, True)} = 0\\]\n实部: \\[{_l(eq_real, True)} = 0\\]\n虚部: \\[{_l(eq_imag, True)} = 0\\]"
+            else:
+                steps = f"设 z = x + iy，代入得：\n ({expr_xy}) = 0\n实部: {eq_real} = 0\n虚部: {eq_imag} = 0"
 
             if sols_xy == []:
                 return steps + "\n\n联立求解导出矛盾，[PASS] 该方程在复数域内无解。"
@@ -412,9 +438,26 @@ def format_solution_list(solutions, latex=False):
     for i, sol in enumerate(solutions, 1):
         if isinstance(sol, (int, float, complex)):
             c = complex(sol)
-            lines.append(f" z{i} = {c.real:.6g}{c.imag:+.6g}i")
+            if latex:
+                re_str = f"{c.real:.6g}".rstrip('0').rstrip('.')
+                im_str = f"{abs(c.imag):.6g}".rstrip('0').rstrip('.')
+                if abs(c.imag) < 1e-12:
+                    lines.append(f" \\[z_{{{i}}} = {re_str}\\]")
+                elif abs(c.real) < 1e-12:
+                    im_show = im_str if im_str != '1' else ''
+                    sign = '-' if c.imag < 0 else ''
+                    lines.append(f" \\[z_{{{i}}} = {sign}{im_show}i\\]")
+                else:
+                    sign = '+' if c.imag >= 0 else '-'
+                    im_show = im_str if im_str != '1' else ''
+                    lines.append(f" \\[z_{{{i}}} = {re_str}{sign}{im_show}i\\]")
+            else:
+                lines.append(f" z{i} = {c.real:.6g}{c.imag:+.6g}i")
         else:
-            lines.append(f" z{i} = {sol}")
+            if latex:
+                lines.append(f" \\[z_{{{i}}} = {_l(sol, True)}\\]")
+            else:
+                lines.append(f" z{i} = {sol}")
     return '\n'.join(lines)
 
 
@@ -460,14 +503,28 @@ def judge_analytic(func_str, latex=False):
     cr2_diff = sp.simplify(uy + vx)
 
     steps = []
-    steps.append("[STEP] C-R条件判定步骤：")
-    steps.append(f" f(z) = u(x,y) + i·v(x,y)")
-    steps.append(f" u(x,y) = {u_expr}")
-    steps.append(f" v(x,y) = {v_expr}")
-    steps.append(f" ∂u/∂x = {ux} | ∂u/∂y = {uy}")
-    steps.append(f" ∂v/∂x = {vx} | ∂v/∂y = {vy}")
-    steps.append(f" C-R① ∂u/∂x - ∂v/∂y = {cr1_diff} {'[PASS]✓' if cr1_diff == 0 else '[NO]✗'}")
-    steps.append(f" C-R② ∂u/∂y + ∂v/∂x = {cr2_diff} {'[PASS]✓' if cr2_diff == 0 else '[NO]✗'}")
+    if latex:
+        steps.append("[STEP] C-R条件判定步骤：")
+        steps.append(f" \\[f(z) = u(x,y) + i\\,v(x,y)\\]")
+        steps.append(f" \\[u(x,y) = {_l(u_expr, True)}\\]")
+        steps.append(f" \\[v(x,y) = {_l(v_expr, True)}\\]")
+        steps.append(f" \\[\\frac{{\\partial u}}{{\\partial x}} = {_l(ux, True)}\\] | "
+                     f"\\[\\frac{{\\partial u}}{{\\partial y}} = {_l(uy, True)}\\]")
+        steps.append(f" \\[\\frac{{\\partial v}}{{\\partial x}} = {_l(vx, True)}\\] | "
+                     f"\\[\\frac{{\\partial v}}{{\\partial y}} = {_l(vy, True)}\\]")
+        cr1_str = f"\\[\\frac{{\\partial u}}{{\\partial x}} - \\frac{{\\partial v}}{{\\partial y}} = {_l(cr1_diff, True)}\\]"
+        cr2_str = f"\\[\\frac{{\\partial u}}{{\\partial y}} + \\frac{{\\partial v}}{{\\partial x}} = {_l(cr2_diff, True)}\\]"
+        steps.append(f" C-R① {cr1_str} {'[PASS]✓' if cr1_diff == 0 else '[NO]✗'}")
+        steps.append(f" C-R② {cr2_str} {'[PASS]✓' if cr2_diff == 0 else '[NO]✗'}")
+    else:
+        steps.append("[STEP] C-R条件判定步骤：")
+        steps.append(f" f(z) = u(x,y) + i·v(x,y)")
+        steps.append(f" u(x,y) = {u_expr}")
+        steps.append(f" v(x,y) = {v_expr}")
+        steps.append(f" ∂u/∂x = {ux} | ∂u/∂y = {uy}")
+        steps.append(f" ∂v/∂x = {vx} | ∂v/∂y = {vy}")
+        steps.append(f" C-R① ∂u/∂x - ∂v/∂y = {cr1_diff} {'[PASS]✓' if cr1_diff == 0 else '[NO]✗'}")
+        steps.append(f" C-R② ∂u/∂y + ∂v/∂x = {cr2_diff} {'[PASS]✓' if cr2_diff == 0 else '[NO]✗'}")
 
     if cr1_diff == 0 and cr2_diff == 0:
         steps.append("[PASS] 严格满足C-R条件，函数在复平面上处处解析")
@@ -480,8 +537,8 @@ def judge_analytic(func_str, latex=False):
 # ======================== 6. 奇点/极点分类 ========================
 def classify_singularity(func_str, z0, latex=False):
     if str(z0).lower() in ['inf', '∞', 'infinity']:
-        return (" > 无穷远点判定：需作代换 w=1/z，分析 w=0 处奇点类型。\n"
-                " 请对 f(1/w) 在 w=0 处重新分析。")
+        return (" > 无穷远点判定：需作代换 \\[w=1/z\\]，分析 \\[w=0\\] 处奇点类型。\n"
+                " 请对 \\[f(1/w)\\] 在 \\[w=0\\] 处重新分析。")
 
     try:
         f = sp.sympify(func_str, locals={'z': z})
@@ -495,6 +552,10 @@ def classify_singularity(func_str, z0, latex=False):
         any(a.is_Pow and (not a.exp.is_Integer) for a in sp.preorder_traversal(f) if a.is_Pow)):
         try:
             val_at = complex(f.subs(z, z0_sym).evalf())
+            if latex:
+                return (f" > \\[z={z0}\\] 疑似为支点（branch point）\n"
+                        f" 函数含多值成分（\\[\\log\\]/sqrt/分数幂），该点非孤立奇点。\n"
+                        f" 留数概念不适用于支点，需沿分支切割分析。")
             return (f" > z={z0} 疑似为支点（branch point）\n"
                     f" 函数含多值成分（log/sqrt/分数幂），该点非孤立奇点。\n"
                     f" 留数概念不适用于支点，需沿分支切割分析。")
@@ -505,6 +566,10 @@ def classify_singularity(func_str, z0, latex=False):
     try:
         limit_val = sp.limit(f, z, z0_sym)
         if limit_val.is_finite:
+            if latex:
+                return (f" > \\[z={z0}\\] 为可去奇点\n"
+                        f" \\[\\displaystyle\\lim_{{z\\to {z0}}} f(z) = {_l(limit_val, True)}\\]\n"
+                        f" 留数 \\[\\operatorname{{Res}}(f, {z0}) = 0\\]")
             return (f" > z={z0} 为可去奇点\n"
                     f" lim_{{z→{z0}}} f(z) = {limit_val}\n"
                     f" 留数 Res(f, {z0}) = 0")
@@ -517,6 +582,9 @@ def classify_singularity(func_str, z0, latex=False):
             g = (z - z0_sym)**n * f
             lim_g = sp.limit(g, z, z0_sym)
             if lim_g.is_finite and lim_g != 0:
+                if latex:
+                    return (f" > \\[z={z0}\\] 为 {n} 阶极点\n"
+                            f" \\[\\displaystyle\\lim_{{z\\to {z0}}} (z-{z0})^{{{n}}}\\cdot f(z) = {_l(lim_g, True)} \\neq 0, \\infty\\]")
                 return (f" > z={z0} 为 {n} 阶极点\n"
                         f" lim_{{z→{z0}}} (z-{z0})^{n}·f(z) = {lim_g} ≠ 0, ∞")
         except Exception:
@@ -526,10 +594,14 @@ def classify_singularity(func_str, z0, latex=False):
         poles_dict = sp.poles(f, z)
         for p, order in poles_dict.items():
             if abs(complex((p - z0_sym).evalf())) < 1e-10:
+                if latex:
+                    return f" > \\[z={z0}\\] 为 {order} 阶极点（有理函数判定）"
                 return f" > z={z0} 为 {order} 阶极点（有理函数判定）"
     except Exception:
         pass
 
+    if latex:
+        return f" > \\[z={z0}\\] 为本性奇点（极限振荡或不存在，且非有限阶极点）"
     return f" > z={z0} 为本性奇点（极限振荡或不存在，且非有限阶极点）"
 
 
@@ -545,6 +617,9 @@ def calc_residue(func_str, z0, latex=False):
     try:
         lim_val = sp.limit(f, z, z0_sym)
         if lim_val.is_finite:
+            if latex:
+                return (f"[STEP] \\[z={z0}\\] 为可去奇点\n"
+                        f"[PASS] \\[\\operatorname{{Res}}(f, {z0}) = 0\\]")
             return (f"[STEP] z={z0} 为可去奇点\n"
                     f"[PASS] Res(f, {z0}) = 0")
     except Exception:
@@ -553,11 +628,18 @@ def calc_residue(func_str, z0, latex=False):
     try:
         res = sp.residue(f, z, z0_sym)
         steps = []
-        steps.append("[STEP] 留数计算步骤：")
-        steps.append(f" 1. 函数：f(z) = {f}")
-        steps.append(f" 2. 奇点：z = {z0}")
-        steps.append(f" 3. 使用留数公式计算")
-        steps.append(f"[PASS] Res(f, {z0}) = {sp.simplify(res)}")
+        if latex:
+            steps.append("[STEP] 留数计算步骤：")
+            steps.append(f" 1. 函数：\\[f(z) = {_l(f, True)}\\]")
+            steps.append(f" 2. 奇点：\\[z = {z0}\\]")
+            steps.append(f" 3. 使用留数公式计算")
+            steps.append(f"[PASS] \\[\\operatorname{{Res}}(f, {z0}) = {_l(sp.simplify(res), True)}\\]")
+        else:
+            steps.append("[STEP] 留数计算步骤：")
+            steps.append(f" 1. 函数：f(z) = {f}")
+            steps.append(f" 2. 奇点：z = {z0}")
+            steps.append(f" 3. 使用留数公式计算")
+            steps.append(f"[PASS] Res(f, {z0}) = {sp.simplify(res)}")
         return '\n'.join(steps)
     except Exception:
         pass
@@ -566,11 +648,16 @@ def calc_residue(func_str, z0, latex=False):
         g = (z - z0_sym) * f
         lim_g = sp.limit(g, z, z0_sym)
         if lim_g.is_finite and lim_g != 0:
+            if latex:
+                return (f"[STEP] 一阶极点留数公式：\\[\\operatorname{{Res}} = \\lim_{{z\\to {z0}}}(z-{z0})f(z)\\]\n"
+                        f"[PASS] \\[\\operatorname{{Res}}(f, {z0}) = {_l(sp.simplify(lim_g), True)}\\]")
             return (f"[STEP] 一阶极点留数公式：Res = lim(z-z0)f(z)\n"
                     f"[PASS] Res(f, {z0}) = {sp.simplify(lim_g)}")
     except Exception:
         pass
 
+    if latex:
+        return f"[FAIL] 无法计算 \\[z={z0}\\] 处的留数"
     return f"[FAIL] 无法计算 z={z0} 处的留数"
 
 
@@ -631,18 +718,30 @@ def calc_complex_integral(func_str, center=0.0, radius=1.0, latex=False):
             on_boundary.append((pole_val, order, pole_sym))
 
     steps = []
-    steps.append("[STEP] 柯西留数定理计算步骤：")
-    steps.append(f" 积分围道：|z - {center}| = {radius}")
-    steps.append(f" {method}得到极点：{[p[0] for p in poles_list]}")
-
-    if on_boundary:
-        steps.append(f" [WARN] 警告：极点 {[p[0] for p in on_boundary]} 恰在围道上")
-        steps.append(f" 积分需取柯西主值，考研一般不考查此情形")
-
-    if not inside:
-        steps.append(f" 围道内无奇点")
-        steps.append(f"[PASS] 由柯西积分定理：∮f(z)dz = 0")
-        return '\n'.join(steps)
+    if latex:
+        steps.append("[STEP] 柯西留数定理计算步骤：")
+        steps.append(f" 积分围道：\\[|z - {center}| = {radius}\\]")
+        pole_strs = ', '.join(_l(sp.sympify(p[0]), True) for p in poles_list)
+        steps.append(f" {method}得到极点：\\[\\{{{pole_strs}\\}}\\]")
+        if on_boundary:
+            pts = ', '.join(str(p[0]) for p in on_boundary)
+            steps.append(f" [WARN] 警告：极点 \\[{{{pts}}}\\] 恰在围道上")
+            steps.append(f" 积分需取柯西主值，考研一般不考查此情形")
+        if not inside:
+            steps.append(f" 围道内无奇点")
+            steps.append(f"[PASS] 由柯西积分定理：\\[\\oint f(z)\\,dz = 0\\]")
+            return '\n'.join(steps)
+    else:
+        steps.append("[STEP] 柯西留数定理计算步骤：")
+        steps.append(f" 积分围道：|z - {center}| = {radius}")
+        steps.append(f" {method}得到极点：{[p[0] for p in poles_list]}")
+        if on_boundary:
+            steps.append(f" [WARN] 警告：极点 {[p[0] for p in on_boundary]} 恰在围道上")
+            steps.append(f" 积分需取柯西主值，考研一般不考查此情形")
+        if not inside:
+            steps.append(f" 围道内无奇点")
+            steps.append(f"[PASS] 由柯西积分定理：∮f(z)dz = 0")
+            return '\n'.join(steps)
 
     total_res = 0
     residue_details = []
@@ -660,13 +759,29 @@ def calc_complex_integral(func_str, center=0.0, radius=1.0, latex=False):
 
     result = 2 * sp.pi * I * total_res
 
-    steps.append(f" 围道内极点及留数：")
-    for pv, od, r in residue_details:
-        steps.append(f" z={pv} ({od}阶) → Res = {r:.6g}")
-    steps.append(f" 留数和 = {_format_complex(total_res)}")
-    steps.append(f"[PASS] ∮f(z)dz = 2πi · ΣRes = {sp.N(result, 10)}")
+    if latex:
+        steps.append(f" 围道内极点及留数：")
+        for pv, od, r in residue_details:
+            steps.append(f" \\[z={pv}\\] ({od}阶) \\[\\to \\operatorname{{Res}} = {r:.6g}\\]")
+        steps.append(f" 留数和 = \\[{_fc_latex(total_res)}\\]")
+        steps.append(f"[PASS] \\[\\displaystyle\\oint f(z)\\,dz = 2\\pi i \\cdot \\sum\\operatorname{{Res}} = {sp.N(result, 10)}\\]")
+    else:
+        steps.append(f" 围道内极点及留数：")
+        for pv, od, r in residue_details:
+            steps.append(f" z={pv} ({od}阶) → Res = {r:.6g}")
+        steps.append(f" 留数和 = {_format_complex(total_res)}")
+        steps.append(f"[PASS] ∮f(z)dz = 2πi · ΣRes = {sp.N(result, 10)}")
 
     return '\n'.join(steps)
+
+
+def _fc_latex(c):
+    """复数 LaTeX 格式化"""
+    if abs(c.imag) < 1e-12:
+        return f"{c.real:.6g}"
+    if abs(c.real) < 1e-12:
+        return f"{c.imag:.6g}i"
+    return f"{c.real:.6g}{c.imag:+.6g}i"
 
 
 def _format_complex(c):
@@ -705,28 +820,51 @@ def series_expand(func_str, at_point=0, order=6, is_laurent=False, latex=False):
         terms = s.removeO()
         has_negative = _has_negative_powers(terms)
 
+        if latex:
+            terms_l = _l(terms, True)
+        else:
+            terms_l = str(terms)
+
         if is_laurent:
             if has_negative:
+                if latex:
+                    return (f"[PASS] \\[z={at_point}\\] 处的洛朗级数（{order}项）：\n"
+                            f" \\[f(z) = {terms_l}\\]\n"
+                            f" (含负幂项，确为洛朗展开)")
                 return (f"[PASS] z={at_point} 处的洛朗级数（{order}项）：\n"
                         f" f(z) = {terms}\n"
                         f" (含负幂项，确为洛朗展开)")
             else:
+                if latex:
+                    return (f"[WARN] \\[z={at_point}\\] 处无负幂项，实为泰勒展开：\n"
+                            f" \\[f(z) = {terms_l}\\]")
                 return (f"[WARN] z={at_point} 处无负幂项，实为泰勒展开：\n"
                         f" f(z) = {terms}")
 
         if has_negative:
+            if latex:
+                return (f"[PASS] \\[z={at_point}\\] 处的级数展开（{order}项）：\n"
+                        f" \\[f(z) = {terms_l}\\]\n"
+                        f" (检测到负幂项，此展开实为洛朗级数)")
             return (f"[PASS] z={at_point} 处的级数展开（{order}项）：\n"
                     f" f(z) = {terms}\n"
                     f" (检测到负幂项，此展开实为洛朗级数)")
 
+        if latex:
+            return f"[PASS] \\[z={at_point}\\] 处的{type_name}展开（{order}项）：\n \\[f(z) = {terms_l}\\]"
         return f"[PASS] z={at_point} 处的{type_name}展开（{order}项）：\n f(z) = {terms}"
 
     except Exception as e:
         try:
             s = sp.series(f, z, at_sym, 3)
             terms = s.removeO()
+            terms_l = _l(terms, latex) if latex else str(terms)
+            if latex:
+                return f"[WARN] 仅能展开到3项：\n \\[f(z) = {terms_l}\\]\n (更高阶展开失败：{e})"
             return f"[WARN] 仅能展开到3项：\n f(z) = {terms}\n (更高阶展开失败：{e})"
         except Exception:
+            if latex:
+                return f"[FAIL] 无法在 \\[z={at_point}\\] 处展开：{e}"
             return f"[FAIL] 无法在 z={at_point} 处展开：{e}"
 
 
