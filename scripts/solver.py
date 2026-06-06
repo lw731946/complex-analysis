@@ -23,13 +23,13 @@ if __name__ == "__main__":
     except Exception:
         pass
 
-    use_latex = '--latex' in sys.argv
-    args = [a for a in sys.argv[1:] if a != '--latex']
+    use_text = '--text' in sys.argv
+    args = [a for a in sys.argv[1:] if a != '--text']
 
     if args:
         problem = ' '.join(args)
-        print(solve(problem, latex=use_latex))
+        print(solve(problem, latex=not use_text))
     else:
-        print("用法: python solver.py [--latex] \"题目\"")
-        print("  --latex   输出 LaTeX 格式数学公式")
+        print("用法: python solver.py [--text] \"题目\"")
+        print("  --text    输出纯文本格式（默认 LaTeX）")
         print("支持: equation: / integral: / analytic: / singularity: / residue: / series:")
