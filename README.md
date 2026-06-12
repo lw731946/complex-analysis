@@ -1,8 +1,18 @@
-# 🎯 复变函数求解器 — Complex Analysis Solver
+# 🎯 复变函数求解器 — Complex Analysis Solver v2.0
 
 > **考研专用 · 基于 SymPy 符号计算 · 零幻觉设计**
 
 一个基于 Python 符号计算引擎的复变函数求解工具，专为考研/数学系学生设计。所有数学运算由 **SymPy** 执行，**绝不依赖 LLM 编造推导过程**。
+
+## 🆕 v2.0 更新
+
+- **LaTeX 输出**：支持 `--text`（纯文本）、`--markdown`（Markdown）、默认 LaTeX 三种输出模式
+- **交互模式**：运行 `python solver.py` 进入交互式 REPL，支持 `help`、`latex on/off` 命令
+- **Markdown 格式化**：`--md` / `--markdown` 参数输出带表情符号的 Markdown 结果
+- **LaTeX 后处理**：自动将数学表达式包裹 `$$...$$`，清理残余 sympy 格式
+- **更完善的题型检测**：新增洛朗级数中文关键词、支点检测、调和性验证
+- **围道参数解析增强**：支持 `|z-(a+bi)|=r` 等复数圆心格式
+- **方程求解增强**：含共轭/Abs/Re/Im 时自动实虚分离求解
 
 ---
 
@@ -24,8 +34,14 @@
 ### 命令行
 
 ```bash
-# 自动检测题型
+# 自动检测题型（默认 LaTeX 输出）
 python solver.py "z^6 - 1 = 0"
+
+# 纯文本输出
+python solver.py --text "z^2 + 1 = 0"
+
+# Markdown 输出
+python solver.py --md "integral: 1/(z(1-z)^3) |z|=0.5"
 
 # 指定题型前缀
 python solver.py "integral: 1/(z(1-z)^3) |z|=0.5"
@@ -38,6 +54,9 @@ python solver.py "analytic: z^2 + 2z"
 python solver.py "方程: |z| + z = 1 + i"
 python solver.py "积分: 1/(z^2+4) |z|=3"
 python solver.py "奇点: 1/(z-1)^2(z+1) at z=1"
+
+# 交互模式（运行后直接输入题目）
+python solver.py
 ```
 
 ### 作为 Python 模块
